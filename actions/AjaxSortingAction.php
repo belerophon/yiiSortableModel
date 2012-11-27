@@ -36,6 +36,7 @@ class AjaxSortingAction extends CAction
          $dragged_entry = $model->findByPk($_POST['dragged_item_id']);
          /*load dragged entry before changing orders*/
          $prev = $dragged_entry->{$order_field};
+         
          $new = $model->findByPk($_POST['replacement_item_id'])->{$order_field};
          /*update order only for the affected records*/
          if ($prev < $new)
@@ -57,7 +58,7 @@ class AjaxSortingAction extends CAction
             }
          }
          /*dragged entry order is changed at last, to not interfere during the changing orders loop*/
-         $dragged_entry->{$order_field} = $new;
+         $dragged_entry->{$order_field} = ($new == $prev) ? $new + 1 : $new;
          $dragged_entry->update();
       }
    }
