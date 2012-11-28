@@ -30,7 +30,8 @@ class SortableCActiveRecordBehavior extends CActiveRecordBehavior
    /**
     * @var string the field name in the database table which stores the order for the record. This should be a positive integer field. Defaults to 'order'
     */
-   public $orderField = 'order';
+   public $orderField = 'order';   
+   public $filterByColumn = null;
 
 
    /**
@@ -42,10 +43,17 @@ class SortableCActiveRecordBehavior extends CActiveRecordBehavior
       $sender = $event->sender;
       if ($sender->isNewRecord) {
          $model = call_user_func(array(get_class($sender), 'model'));
-         $last_record = $model->find(array(
-            'order' => '`'.$this->orderField.'` DESC',
-            'limit' => 1
-         ));
+         
+         $criteria = new CDbCriteria();
+         $criteria->order = '`'.$this->orderField.'` DESC';
+         $criteria->limit = 1;
+         if($this->filterByColumn){
+             $criteria->condition = "{$this->filterByColumn}=:filterColumn";
+             $criteria->params = array(':filterColumn' => $sender->{$this->filterByColumn});
+         }
+         //$temp1 = $sender->{$this->filterByColumn};
+         $last_record = $model->find($criteria);
+         //$temp = $last_record->{$this->orderField};
          if ($last_record) {
             $sender->{$this->orderField} = $last_record->{$this->orderField} + 1;
          } else {
@@ -65,10 +73,16 @@ class SortableCActiveRecordBehavior extends CActiveRecordBehavior
    {
       $sender = $event->sender;
       $model = call_user_func(array(get_class($sender), 'model'));
-      $following_records = $model->findAll(array(
-         'order' => '`'.$this->orderField.'` ASC',
-         'condition' => '`'.$this->orderField.'` > '.$sender->{$this->orderField},
-      ));
+      
+      $criteria = new CDbCriteria();
+      $criteria->order = '`'.$this->orderField.'` ASC';
+      $criteria->addCondition('`'.$this->orderField.'` > '.$sender->{$this->orderField});
+      if($this->filterByColumn){
+         $criteria->addCondition("{$this->filterByColumn}=:filterColumn");
+         $criteria->params = array(':filterColumn' => $sender->{$this->filterByColumn});
+      }
+         
+      $following_records = $model->findAll($criteria);
       foreach ($following_records as $record) {
          $record->{$this->orderField}--;
          $record->update();
