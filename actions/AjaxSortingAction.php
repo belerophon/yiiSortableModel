@@ -1,4 +1,5 @@
 <?php
+
 //Copyright 2011, Marc Busqué Pérez
 //
 //This file is a part of Yii Sortable Model
@@ -24,42 +25,38 @@
  * @license LGPL
  * @since 1.0
  */
+class AjaxSortingAction extends CAction {
+    public $filterByColumn = null;
 
-class AjaxSortingAction extends CAction
-{
-   public function run()
-   {
-      if (isset($_POST))
-      {
-         $order_field = $_POST['order_field'];
-         $model = call_user_func(array($_POST['model'], 'model'));
-         $dragged_entry = $model->findByPk($_POST['dragged_item_id']);
-         /*load dragged entry before changing orders*/
-         $prev = $dragged_entry->{$order_field};
-         
-         $new = $model->findByPk($_POST['replacement_item_id'])->{$order_field};
-         /*update order only for the affected records*/
-         if ($prev < $new)
-         {
-            for ($i = $prev + 1;$i <= $new; $i++)
-            {
-               $entry = $model->findByAttributes(array($order_field => $i));
-               $entry->{$order_field} = $entry->{$order_field} - 1;
-               $entry->update();
+    public function run() {
+        if (isset($_POST)) {
+            $order_field = $_POST['order_field'];
+            $model = call_user_func(array($_POST['model'], 'model'));
+            $dragged_entry = $model->findByPk($_POST['dragged_item_id']);
+            /* load dragged entry before changing orders */
+            $prev = $dragged_entry->{$order_field};
+
+            $new = $model->findByPk($_POST['replacement_item_id'])->{$order_field};
+            /* filter a subset from the table */
+            $filterCriteria = isset($this->filterByColumn) ? array($this->filterByColumn => $dragged_entry->{$this->filterByColumn}) : array();
+            /* update order only for the affected records */
+            if ($prev < $new) {
+                for ($i = $prev + 1; $i <= $new; $i++) {
+                    $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                    $entry->{$order_field} = $entry->{$order_field} - 1;
+                    $entry->update();
+                }
+            } elseif ($prev > $new) {
+                for ($i = $prev - 1; $i >= $new; $i--) {
+                    $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                    $entry->{$order_field} = $entry->{$order_field} + 1;
+                    $entry->update();
+                }
             }
-         }
-         elseif ($prev > $new)
-         {
-            for ($i = $prev - 1;$i >= $new; $i--)
-            {
-               $entry = $model->findByAttributes(array($order_field => $i));
-               $entry->{$order_field} = $entry->{$order_field} + 1;
-               $entry->update();
-            }
-         }
-         /*dragged entry order is changed at last, to not interfere during the changing orders loop*/
-         $dragged_entry->{$order_field} = ($new == $prev) ? $new + 1 : $new;
-         $dragged_entry->update();
-      }
-   }
+            /* dragged entry order is changed at last, to not interfere during the changing orders loop */
+            $dragged_entry->{$order_field} = ($new == $prev) ? $new + 1 : $new;
+            $dragged_entry->update();
+        }
+    }
+
 }
