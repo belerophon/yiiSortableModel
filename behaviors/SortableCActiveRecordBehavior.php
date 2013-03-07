@@ -1,4 +1,5 @@
 <?php
+
 //Copyright 2011, Marc Busqué Pérez
 //
 //This file is a part of Yii Sortable Model
@@ -25,69 +26,85 @@
  * @license LGPL
  * @since 1.1
  */
-class SortableCActiveRecordBehavior extends CActiveRecordBehavior
-{
-   /**
-    * @var string the field name in the database table which stores the order for the record. This should be a positive integer field. Defaults to 'order'
-    */
-   public $orderField = 'order';   
-   public $filterByColumn = null;
+class SortableCActiveRecordBehavior extends CActiveRecordBehavior {
 
+    /**
+     * @var string the field name in the database table which stores the order for the record. This should be a positive integer field. Defaults to 'order'
+     */
+    public $orderField = 'order';
+    public $filterByColumn = null;
 
-   /**
-    * Responds to {@link CActiveRecord::onBeforeSave} event.
-    * @param CModelEvent $event event parameter
-    */
-   public function beforeSave($event)
-   {
-      $sender = $event->sender;
-      if ($sender->isNewRecord) {
-         $model = call_user_func(array(get_class($sender), 'model'));
-         
-         $criteria = new CDbCriteria();
-         $criteria->order = '`'.$this->orderField.'` DESC';
-         $criteria->limit = 1;
-         if($this->filterByColumn){
-             $criteria->condition = "{$this->filterByColumn}=:filterColumn";
-             $criteria->params = array(':filterColumn' => $sender->{$this->filterByColumn});
-         }
-         //$temp1 = $sender->{$this->filterByColumn};
-         $last_record = $model->find($criteria);
-         //$temp = $last_record->{$this->orderField};
-         if ($last_record) {
-            $sender->{$this->orderField} = $last_record->{$this->orderField} + 1;
-         } else {
-            $sender->{$this->orderField} = 1;
-         }
-      }
+    /**
+     * Responds to {@link CActiveRecord::onBeforeSave} event.
+     * @param CModelEvent $event event parameter
+     */
+    public function beforeSave($event) {
+        $sender = $event->sender;        
+         self::updateOrderBeforeSave(
+                 $sender, 
+                 $this->orderField, 
+                 isset($this->filterByColumn) ? $this->filterByColumn : null, 
+                 isset($this->filterByColumn) ? $sender->{$this->filterByColumn} : null
+                 );
+        return parent::beforeSave($event);
+        
+    }
+    
+    public static function updateOrderBeforeSave($arModel, $orderField, $filterColumn = null, $filterColumnValue = null){
+        if($arModel->isNewRecord){
+            $criteria = new CDbCriteria();
+            $criteria->order =  '`' . $orderField . '` DESC';
+            $criteria->limit = 1;
+            
+             if ( !empty($filterColumn) && !empty($filterColumnValue) ) {
+                $criteria->condition = "{$filterColumn}=:filterColumn";
+                $criteria->params = array(':filterColumn' => $filterColumnValue);
+            }
+            
+            $finder = call_user_func(array(get_class($arModel), 'model'));
+            $last_record = $finder->find($criteria);
+            
+            if (isset($last_record)) {
+                $arModel->{$orderField} = $last_record->{$orderField} + 1;
+            } else {
+                $arModel->{$orderField} = 1;
+            }
+        }
+    }
 
-      return parent::beforeSave($event);
-   } 
+    /**
+     * Responds to {@link CActiveRecord::onBeforeDelete} event.
+     * Update records order field in a manner that their values are still successively increased by one (so, there is no gap caused by the deleted record)
+     * @param CEvent $event event parameter
+     */
+    public function afterDelete($event) {
+        $sender = $event->sender;             
+        self::updateOrderAfterDelete(
+                $sender, 
+                $this->orderField, 
+                $sender->{$this->orderField}, 
+                isset($this->filterByColumn) ? $this->filterByColumn : null, 
+                isset($this->filterByColumn) ? $sender->{$this->filterByColumn} : null
+                );
 
-   /**
-    * Responds to {@link CActiveRecord::onBeforeDelete} event.
-    * Update records order field in a manner that their values are still successively increased by one (so, there is no gap caused by the deleted record)
-    * @param CEvent $event event parameter
-    */
-   public function afterDelete($event)
-   {
-      $sender = $event->sender;
-      $model = call_user_func(array(get_class($sender), 'model'));
-      
-      $criteria = new CDbCriteria();
-      $criteria->order = '`'.$this->orderField.'` ASC';
-      $criteria->addCondition('`'.$this->orderField.'` > '.$sender->{$this->orderField});
-      if($this->filterByColumn){
-         $criteria->addCondition("{$this->filterByColumn}=:filterColumn");
-         $criteria->params = array(':filterColumn' => $sender->{$this->filterByColumn});
-      }
-         
-      $following_records = $model->findAll($criteria);
-      foreach ($following_records as $record) {
-         $record->{$this->orderField}--;
-         $record->update();
-      }
+        return parent::afterDelete($event);
+    }
 
-      return parent::afterDelete($event);
-   }
+    public static function updateOrderAfterDelete($arModel, $orderField, $deletedValueOrderField, $filterColumn = null, $filterColumnValue = null) {
+        $criteria = new CDbCriteria();
+        $criteria->order = '`' . $orderField . '` ASC';
+        $criteria->addCondition('`' . $orderField . '` > ' . $deletedValueOrderField);
+        if (!empty($filterColumn) && !empty($filterColumnValue)) {
+            $criteria->addCondition("{$filterColumn}=:filterColumn");
+            $criteria->params = array(':filterColumn' => $filterColumnValue);
+        }
+        $finder = call_user_func(array(get_class($arModel), 'model'));   
+        $following_records = $finder->findAll($criteria);
+         foreach ($following_records as $record) {
+            $record->{$orderField}--;
+            $record->update();
+        }
+        
+    }
+
 }
