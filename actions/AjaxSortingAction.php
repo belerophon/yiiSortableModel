@@ -26,6 +26,7 @@
  * @since 1.0
  */
 class AjaxSortingAction extends CAction {
+
     public $filterByColumn = null;
 
     public function run() {
@@ -39,23 +40,45 @@ class AjaxSortingAction extends CAction {
             $new = $model->findByPk($_POST['replacement_item_id'])->{$order_field};
             /* filter a subset from the table */
             $filterCriteria = isset($this->filterByColumn) ? array($this->filterByColumn => $dragged_entry->{$this->filterByColumn}) : array();
-            /* update order only for the affected records */
-            if ($prev < $new) {
-                for ($i = $prev + 1; $i <= $new; $i++) {
-                    $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
-                    $entry->{$order_field} = $entry->{$order_field} - 1;
-                    $entry->update();
-                }
-            } elseif ($prev > $new) {
-                for ($i = $prev - 1; $i >= $new; $i--) {
-                    $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
-                    $entry->{$order_field} = $entry->{$order_field} + 1;
-                    $entry->update();
-                }
+
+            /* @var $db CDbConnection */
+            $db = $model->getDbConnection();
+            $success = true;
+            if ($db->getCurrentTransaction() === null) {
+                $transaction = $db->beginTransaction();
             }
-            /* dragged entry order is changed at last, to not interfere during the changing orders loop */
-            $dragged_entry->{$order_field} = ($new == $prev) ? $new + 1 : $new;
-            $dragged_entry->update();
+            try {
+                /* update order only for the affected records */
+                if ($prev < $new) {
+                    for ($i = $prev + 1; $i <= $new; $i++) {
+                        $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                        $entry->{$order_field} = $entry->{$order_field} - 1;
+                        $success = $success && $entry->update();
+                    }
+                } elseif ($prev > $new) {
+                    for ($i = $prev - 1; $i >= $new; $i--) {
+                        $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                        $entry->{$order_field} = $entry->{$order_field} + 1;
+                        $success = $success && $entry->update();
+                    }
+                }
+                /* dragged entry order is changed at last, to not interfere during the changing orders loop */
+                $dragged_entry->{$order_field} = ($new == $prev) ? $new + 1 : $new;
+                $success = $success && $dragged_entry->update();
+                if (isset($transaction)) {
+                    if ($success === true) {
+                        $transaction->commit();
+                    } else {
+                        $transaction->rollback();
+                        throw new CDbException("Could sort the set! Some rows could not be updated!");
+                    }
+                }
+            } catch (Exception $ex) {
+                if (isset($transaction)) {
+                    $transaction->rollback();
+                }
+                throw $ex;
+            }
         }
     }
 
