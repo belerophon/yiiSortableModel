@@ -39,26 +39,42 @@ class SortableCActiveRecordBehavior extends CActiveRecordBehavior {
      * @param CModelEvent $event event parameter
      */
     public function beforeSave($event) {
-        $sender = $event->sender;        
-         self::updateOrderBeforeSave(
+        $sender = $event->sender;
+        
+        $filterByColumnVals = null;
+        if (isset($this->filterByColumn)) {
+            if (is_string($this->filterByColumn)) {
+                $filterByColumnVals[$this->filterByColumn] = $sender->{$this->filterByColumn};
+            } else if (is_array($this->filterByColumn)) {
+                foreach ($this->filterByColumn as $column) {
+                    $filterByColumnVals[$column] = $sender->{$column};
+                }
+            } else {
+                throw new CDbException('SortableCActiveRecordBehavior expects filterByColumn to be a string or array of strings');
+            }
+        }
+
+        self::updateOrderBeforeSave(
                  $sender, 
                  $this->orderField, 
-                 isset($this->filterByColumn) ? $this->filterByColumn : null, 
-                 isset($this->filterByColumn) ? $sender->{$this->filterByColumn} : null
+                 $filterByColumnVals
                  );
         return parent::beforeSave($event);
         
     }
     
-    public static function updateOrderBeforeSave($arModel, $orderField, $filterColumn = null, $filterColumnValue = null){
+    public static function updateOrderBeforeSave($arModel, $orderField, $filterByColumnVals){
         if($arModel->isNewRecord){
             $criteria = new CDbCriteria();
             $criteria->order =  '`' . $orderField . '` DESC';
             $criteria->limit = 1;
+            $criteria->params = array();
             
-             if ( !empty($filterColumn) && !empty($filterColumnValue) ) {
-                $criteria->condition = "{$filterColumn}=:filterColumn";
-                $criteria->params = array(':filterColumn' => $filterColumnValue);
+            if(isset($filterByColumnVals) && is_array($filterByColumnVals)){
+                foreach($filterByColumnVals as $column => $value){
+                    $criteria->addCondition("{$column}=:{$column}");
+                    $criteria->params[":{$column}"] = $value;
+                }
             }
             
             $finder = call_user_func(array(get_class($arModel), 'model'));
@@ -78,26 +94,43 @@ class SortableCActiveRecordBehavior extends CActiveRecordBehavior {
      * @param CEvent $event event parameter
      */
     public function afterDelete($event) {
-        $sender = $event->sender;             
+        $sender = $event->sender;
+        $filterByColumnVals = null;
+        if(isset($this->filterByColumn)){
+            if(is_string($this->filterByColumn)){
+                $filterByColumnVals[$this->filterByColumn] = $sender->{$this->filterByColumn};
+            }else if(is_array($this->filterByColumn)){
+                foreach($this->filterByColumn as $column){
+                    $filterByColumnVals[$column] = $sender->{$column};
+                }
+            }else{
+                throw new CDbException('SortableCActiveRecordBehavior expects filterByColumn to be a string or array of strings');
+            }
+        }
         self::updateOrderAfterDelete(
                 $sender, 
                 $this->orderField, 
                 $sender->{$this->orderField}, 
-                isset($this->filterByColumn) ? $this->filterByColumn : null, 
-                isset($this->filterByColumn) ? $sender->{$this->filterByColumn} : null
+                $filterByColumnVals
                 );
 
         return parent::afterDelete($event);
     }
 
-    public static function updateOrderAfterDelete($arModel, $orderField, $deletedValueOrderField, $filterColumn = null, $filterColumnValue = null) {
+    public static function updateOrderAfterDelete($arModel, $orderField, $deletedValueOrderField, $filterByColumnVals) {
         $criteria = new CDbCriteria();
         $criteria->order = '`' . $orderField . '` ASC';
         $criteria->addCondition('`' . $orderField . '` > ' . $deletedValueOrderField);
-        if (!empty($filterColumn) && !empty($filterColumnValue)) {
-            $criteria->addCondition("{$filterColumn}=:filterColumn");
-            $criteria->params = array(':filterColumn' => $filterColumnValue);
-        }
+        $criteria->params = array();
+        
+         if(isset($filterByColumnVals) && is_array($filterByColumnVals)){
+                foreach($filterByColumnVals as $column => $value){
+                    $criteria->addCondition("{$column}=:{$column}");
+                    $criteria->params[":{$column}"] = $value;
+                }
+            }
+        
+       
         $finder = call_user_func(array(get_class($arModel), 'model'));   
         $following_records = $finder->findAll($criteria);
          foreach ($following_records as $record) {

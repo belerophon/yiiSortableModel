@@ -39,8 +39,19 @@ class AjaxSortingAction extends CAction {
 
             $new = $model->findByPk($_POST['replacement_item_id'])->{$order_field};
             /* filter a subset from the table */
-            $filterCriteria = isset($this->filterByColumn) ? array($this->filterByColumn => $dragged_entry->{$this->filterByColumn}) : array();
-
+            $filterByColumnVals = null;
+            if (isset($this->filterByColumn)) {
+                if (is_string($this->filterByColumn)) {
+                    $filterByColumnVals[$this->filterByColumn] = $dragged_entry->{$this->filterByColumn};
+                } else if (is_array($this->filterByColumn)) {
+                    foreach ($this->filterByColumn as $column) {
+                        $filterByColumnVals[$column] = $dragged_entry->{$column};
+                    }
+                } else {
+                    throw new CDbException('SortableCActiveRecordBehavior expects filterByColumn to be a string or array of strings');
+                }
+            }
+            
             /* @var $db CDbConnection */
             $db = $model->getDbConnection();
             $success = true;
@@ -51,13 +62,13 @@ class AjaxSortingAction extends CAction {
                 /* update order only for the affected records */
                 if ($prev < $new) {
                     for ($i = $prev + 1; $i <= $new; $i++) {
-                        $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                        $entry = $model->findByAttributes(array_merge($filterByColumnVals, array($order_field => $i)));
                         $entry->{$order_field} = $entry->{$order_field} - 1;
                         $success = $success && $entry->update();
                     }
                 } elseif ($prev > $new) {
                     for ($i = $prev - 1; $i >= $new; $i--) {
-                        $entry = $model->findByAttributes(array_merge($filterCriteria, array($order_field => $i)));
+                        $entry = $model->findByAttributes(array_merge($filterByColumnVals, array($order_field => $i)));
                         $entry->{$order_field} = $entry->{$order_field} + 1;
                         $success = $success && $entry->update();
                     }
